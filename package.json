@@ -1,0 +1,20 @@
+{
+  "name": "stunning-vibe-coder",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@google/genai": "^1.16.0",
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "nuxt": "^3.17.5",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
