@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { useChat } from '~/composables/useChat'
 import { INTEGRATIONS, EXAMPLE_PROMPTS } from '~/constants/integrations'
-import AppHeader       from '~/components/AppHeader.vue'
-import WelcomeScreen   from '~/components/WelcomeScreen.vue'
-import ChatMessage     from '~/components/ChatMessage.vue'
-import TypingIndicator from '~/components/TypingIndicator.vue'
-import ChatInput       from '~/components/ChatInput.vue'
 
 const {
   prompt, messages, loading, error,
