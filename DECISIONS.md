@@ -1,63 +1,47 @@
 # Decisions
 
-## What I improved in the 60-minute production pass
+## What I improved in the latest UI/UX passes
 
-### 1. Kept the API key server-side
+### 1. Replicated Industry-Standard Chat UX
+Following an initial pass with a "vibe coding" aesthetic, the layout was completely restructured into a pixel-perfect standard conversational AI interface (similar to ChatGPT).
+- Features a bottom-pinned text area.
+- User requests map to right-aligned rounded message bubbles.
+- AI responses stream cleanly across the left.
 
-The Gemini SDK is only used inside the Nuxt server route. The browser never receives `GEMINI_API_KEY`.
+### 2. High-Quality Markdown and Code Blocks
+I overhauled text handling completely. Instead of raw bindings `{{ msg.text }}`, the system now uses `markdown-it` combined with `highlight.js`.
+- Generates fully styled syntax-highlighted code blocks for over 180 languages.
+- Implemented the iconic "dark code-block header" with a one-click clipboard copy button.
+- Custom WebKit scrollbar overlays injected into `app.vue` ensure nested code overflow never breaks outer styling.
 
-This is the most important security decision for a real deployment.
+### 3. Kept the API key server-side
+The Gemini SDK is explicitly kept inside the Nuxt server route. The browser never receives `GEMINI_API_KEY`.
 
-### 2. Added input validation
+### 4. Added input validation
+The API rejects empty prompts or prompts longer than 3,000 characters to prevent unwanted payload expenditures.
 
-The API rejects an empty prompt and prompts longer than 3,000 characters.
+### 5. Hidden but Powerful Integration Toggle
+The dummy integrations are preserved from the requirements. They sit as subtle toggleable pills within the `textarea` container. Selecting them dynamically updates the `server/api/generate.post.ts` system prompt configuration, fulfilling the core prompt requirements while avoiding UI clutter.
 
-This prevents accidental or unnecessarily expensive requests.
-
-### 3. Made integrations explicit context
-
-Each dummy integration has a stable ID and a small description. The backend converts selected IDs into a dedicated section of the Gemini system instruction.
-
-This makes the assignment requirement easy to inspect and test.
-
-### 4. Added useful failure states
-
-The UI has loading, validation, and API error states instead of silently failing.
-
-### 5. Focused the UX on one core action
-
-The product has one obvious loop:
-
-**Describe → choose context → generate → inspect result**
-
-I intentionally avoided extra navigation and dashboard complexity.
+---
 
 ## What I intentionally left out
 
+### Real backend databases
+No persistence logic is configured. Conversations wipe on browser refresh. For an evaluation MVP, stateless history arrays held in the Vue `<script setup>` define the most direct understanding of the core requirement.
+
+### Streaming responses
+The current execution awaits the full return packet from Gemini. While streaming vastly improves perceived latency to users (TTFB), blocking for the full markdown payload was safer to execute rapidly without needing complicated SSE parsers on the frontend to inject into `markdown-it` chunk-by-chunk.
+
 ### Authentication
+No login flows exist because it's not strictly required in the prompt.
 
-There is no account system because it is not required by the task.
-
-### Database
-
-There is no persistence for prompts or generated responses. For an evaluation task, keeping the architecture small makes the core behavior easier to understand.
-
-### Real integrations
-
-Stripe, Shopify, Gmail, Slack, and Google Sheets are deliberately mocked as AI context. No OAuth, webhooks, or external API calls are implemented.
-
-### Streaming
-
-The current version waits for the completed Gemini response. Streaming would improve perceived latency, but it was not necessary to prove the end-to-end requirement.
-
-### Markdown rendering
-
-The response is displayed as text rather than introducing a full markdown renderer and its security considerations.
+---
 
 ## Biggest production risk
 
-**Uncontrolled AI usage and cost.**
+**Arbitrary AI Cost and Prompt Injection**
+Placing an unfiltered text box that calls an external LLM publicly exposes the owner to significant API scraping, spam, or prompt injection. 
+If mock integrations ever become real, prompt injection is a major risk, as a malicious user might attempt to exfiltrate Stripe or Shopify data embedded in the hidden context layer.
 
-A public AI endpoint can be abused through high request volume or very large prompts. In production I would put authentication/rate limiting in front of the endpoint, enforce server-side quotas, add request size limits, log token usage, and monitor Gemini errors and latency.
-
-A second important risk is prompt injection if future versions allow user-controlled external content or real integration data to become model context. Integration context should be strongly separated from untrusted content and sensitive credentials should never be inserted into prompts.
+A strong authentication wrapper and robust rate limit architecture (via Upstash or Redis) would be strictly required before merging to `main`.

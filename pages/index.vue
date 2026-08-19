@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { ref, computed, nextTick } from 'vue'
+import ChatMessage from '~/components/ChatMessage.vue'
+
 type Integration = {
   id: string
   name: string
@@ -8,49 +11,24 @@ type Integration = {
 }
 
 const integrations: Integration[] = [
-  {
-    id: 'stripe',
-    name: 'Stripe',
-    description: 'Payments & billing',
-    icon: 'S',
-    accent: 'from-violet-500 to-indigo-500'
-  },
-  {
-    id: 'shopify',
-    name: 'Shopify',
-    description: 'Store & products',
-    icon: '⌁',
-    accent: 'from-emerald-400 to-green-600'
-  },
-  {
-    id: 'gmail',
-    name: 'Gmail',
-    description: 'Email & outreach',
-    icon: 'M',
-    accent: 'from-red-400 to-orange-500'
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Team notifications',
-    icon: '✣',
-    accent: 'from-pink-500 to-cyan-400'
-  },
-  {
-    id: 'sheets',
-    name: 'Google Sheets',
-    description: 'Tables & data',
-    icon: '▦',
-    accent: 'from-green-400 to-emerald-600'
-  }
+  { id: 'stripe', name: 'Stripe', description: 'Payments & billing', icon: 'S', accent: 'from-violet-500 to-indigo-500' },
+  { id: 'shopify', name: 'Shopify', description: 'Store & products', icon: '⌁', accent: 'from-emerald-400 to-green-600' },
+  { id: 'gmail', name: 'Gmail', description: 'Email & outreach', icon: 'M', accent: 'from-red-400 to-orange-500' },
+  { id: 'slack', name: 'Slack', description: 'Team notifications', icon: '✣', accent: 'from-pink-500 to-cyan-400' },
+  { id: 'sheets', name: 'Google Sheets', description: 'Tables & data', icon: '▦', accent: 'from-green-400 to-emerald-600' }
 ]
+
+type Message = {
+  id: string
+  role: 'user' | 'model'
+  text: string
+}
 
 const prompt = ref('')
 const selected = ref<string[]>(['stripe', 'slack'])
-const response = ref('')
+const messages = ref<Message[]>([])
 const loading = ref(false)
 const error = ref('')
-const copied = ref(false)
 
 const examples = [
   'Build a customer feedback dashboard',
@@ -58,9 +36,9 @@ const examples = [
   'Build an AI sales assistant'
 ]
 
-const selectedIntegrations = computed(() =>
-  integrations.filter((integration) => selected.value.includes(integration.id))
-)
+const messageContainer = ref<HTMLElement | null>(null)
+
+const hasStarted = computed(() => messages.value.length > 0)
 
 function toggleIntegration(id: string) {
   selected.value = selected.value.includes(id)
@@ -68,23 +46,47 @@ function toggleIntegration(id: string) {
     : [...selected.value, id]
 }
 
-async function generate() {
+const scrollToBottom = async () => {
+  await nextTick()
+  if (messageContainer.value) {
+    messageContainer.value.scrollTo({
+      top: messageContainer.value.scrollHeight,
+      behavior: 'smooth'
+    })
+  }
+}
+
+async function send() {
   if (!prompt.value.trim() || loading.value) return
 
+  const userText = prompt.value.trim()
+  prompt.value = ''
+  
+  messages.value.push({
+    id: Date.now().toString(),
+    role: 'user',
+    text: userText
+  })
+  
+  await scrollToBottom()
+  
   loading.value = true
   error.value = ''
-  response.value = ''
 
   try {
     const result = await $fetch<{ text: string }>('/api/generate', {
       method: 'POST',
       body: {
-        prompt: prompt.value.trim(),
+        messages: messages.value.map(m => ({ role: m.role, text: m.text })),
         integrations: selected.value
       }
     })
 
-    response.value = result.text
+    messages.value.push({
+      id: Date.now().toString(),
+      role: 'model',
+      text: result.text
+    })
   } catch (err: any) {
     error.value = err?.data?.message || 'Something went wrong. Please try again.'
   } finally {
@@ -94,168 +96,119 @@ async function generate() {
 
 function useExample(example: string) {
   prompt.value = example
-}
-
-async function copyResponse() {
-  if (!response.value) return
-  await navigator.clipboard.writeText(response.value)
-  copied.value = true
-  window.setTimeout(() => (copied.value = false), 1500)
+  send()
 }
 </script>
 
 <template>
-  <main class="min-h-screen overflow-hidden bg-[#08090d] text-white">
-    <div class="pointer-events-none fixed inset-0">
-      <div class="absolute left-1/2 top-[-18rem] h-[36rem] w-[55rem] -translate-x-1/2 rounded-full bg-fuchsia-600/10 blur-3xl" />
-      <div class="absolute bottom-[-22rem] left-[-10rem] h-[36rem] w-[36rem] rounded-full bg-indigo-600/10 blur-3xl" />
-    </div>
-
-    <header class="relative mx-auto flex max-w-7xl items-center justify-between px-5 py-6 lg:px-8">
-      <div class="flex items-center gap-3">
-        <div class="grid h-9 w-9 place-items-center rounded-xl bg-white text-sm font-black text-black shadow-lg shadow-white/10">S</div>
-        <span class="text-sm font-semibold tracking-tight">Stunning AI Builder</span>
-      </div>
-
-      <div class="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 sm:flex">
-        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
-        Gemini powered
+  <main class="flex h-screen flex-col overflow-hidden bg-[#212121] text-zinc-100 relative font-sans">
+    
+    <!-- Topbar -->
+    <header class="relative z-10 shrink-0 flex w-full items-center justify-between px-4 py-3">
+      <div class="flex items-center gap-2 cursor-pointer hover:bg-[#2f2f2f] px-2 py-1.5 rounded-lg transition-colors text-zinc-200">
+        <span class="text-lg font-semibold tracking-tight">ChatGPT Vibe</span>
+        <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg"><path d="m6 9 6 6 6-6"></path></svg>
       </div>
     </header>
 
-    <section class="relative mx-auto max-w-5xl px-5 pb-20 pt-12 text-center lg:px-8 lg:pt-20">
-      <div class="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300">
-        <span>✦</span>
-        Turn an idea into a build plan
-      </div>
-
-      <h1 class="mx-auto max-w-4xl text-5xl font-semibold tracking-[-0.04em] text-white sm:text-6xl lg:text-7xl">
-        Build what you mean.
-        <span class="bg-gradient-to-r from-fuchsia-300 via-white to-indigo-300 bg-clip-text text-transparent">Not what you type.</span>
-      </h1>
-
-      <p class="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-400 sm:text-lg">
-        Describe the product you want. Pick the tools it should understand. Gemini turns your idea into a practical implementation direction.
-      </p>
-
-      <div class="mx-auto mt-10 max-w-4xl text-left">
-        <div class="rounded-3xl border border-white/10 bg-white/[0.035] p-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
-          <div class="rounded-[1.35rem] bg-[#0d0f15] p-5 sm:p-6">
-            <label class="mb-3 block text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
-              What do you want to build?
-            </label>
-
-            <textarea
-              v-model="prompt"
-              rows="5"
-              maxlength="3000"
-              class="w-full resize-none bg-transparent text-lg leading-8 text-white outline-none placeholder:text-zinc-600"
-              placeholder="Example: Build a modern customer portal where users can track invoices, pay outstanding balances, and get Slack alerts..."
-              @keydown.meta.enter="generate"
-              @keydown.ctrl.enter="generate"
-            />
-
-            <div class="mt-4 flex flex-wrap gap-2">
-              <button
-                v-for="example in examples"
-                :key="example"
-                type="button"
-                class="rounded-full border border-white/10 bg-white/[0.025] px-3 py-1.5 text-xs text-zinc-400 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
-                @click="useExample(example)"
-              >
-                {{ example }}
-              </button>
-            </div>
-
-            <div class="mt-6 flex flex-col gap-4 border-t border-white/10 pt-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div class="mb-2 text-xs font-medium text-zinc-400">Context integrations</div>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="integration in integrations"
-                    :key="integration.id"
-                    type="button"
-                    class="group flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition"
-                    :class="selected.includes(integration.id)
-                      ? 'border-white/20 bg-white/[0.09] text-white'
-                      : 'border-white/8 bg-white/[0.02] text-zinc-500 hover:border-white/15 hover:text-zinc-300'"
-                    @click="toggleIntegration(integration.id)"
-                  >
-                    <span
-                      class="grid h-6 w-6 place-items-center rounded-lg bg-gradient-to-br text-[10px] font-bold text-white"
-                      :class="integration.accent"
-                    >
-                      {{ integration.icon }}
-                    </span>
-                    {{ integration.name }}
-                    <span v-if="selected.includes(integration.id)" class="text-zinc-300">✓</span>
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                :disabled="loading || !prompt.trim()"
-                class="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-                @click="generate"
-              >
-                <span v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
-                <span v-else>Generate</span>
-                <span v-if="!loading">⌘↵</span>
-              </button>
-            </div>
-          </div>
+    <!-- Chat Area -->
+    <section 
+      ref="messageContainer"
+      class="relative z-10 flex-1 overflow-y-auto px-4"
+      :class="!hasStarted ? 'flex items-center justify-center' : 'pb-8'"
+    >
+      <div v-if="!hasStarted" class="max-w-3xl w-full flex flex-col items-center text-center -mt-16">
+        <div class="grid h-16 w-16 place-items-center rounded-full bg-white text-3xl font-black text-black shadow-lg mb-6">
+          ✦
         </div>
+        <h1 class="text-2xl font-semibold mb-8 text-white">How can I help you today?</h1>
 
-        <p class="mt-3 text-center text-xs text-zinc-600">
-          {{ prompt.length }}/3000 · Selected integrations become model context, not live connections.
-        </p>
-      </div>
-    </section>
-
-    <section v-if="loading || error || response" class="relative mx-auto max-w-4xl px-5 pb-20 lg:px-8">
-      <div class="rounded-3xl border border-white/10 bg-white/[0.035] p-6 backdrop-blur-xl sm:p-8">
-        <div class="mb-5 flex items-center justify-between gap-4">
-          <div>
-            <div class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">Gemini response</div>
-            <div class="mt-1 text-sm text-zinc-400">
-              Context:
-              <span v-for="(integration, index) in selectedIntegrations" :key="integration.id">
-                {{ integration.name }}<span v-if="index < selectedIntegrations.length - 1">, </span>
-              </span>
-              <span v-if="!selectedIntegrations.length">none</span>
-            </div>
-          </div>
-
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl px-4">
           <button
-            v-if="response"
+            v-for="example in examples"
+            :key="example"
             type="button"
-            class="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/[0.05] hover:text-white"
-            @click="copyResponse"
+            class="flex items-center justify-between text-left p-4 rounded-xl border border-zinc-700 hover:bg-[#2f2f2f] text-sm text-zinc-300 transition-colors"
+            @click="useExample(example)"
           >
-            {{ copied ? 'Copied ✓' : 'Copy' }}
+            <span>{{ example }}</span>
+            <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-zinc-500" xmlns="http://www.w3.org/2000/svg"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
           </button>
         </div>
-
-        <div v-if="loading" class="space-y-3">
-          <div class="h-4 w-11/12 animate-pulse rounded bg-white/10" />
-          <div class="h-4 w-10/12 animate-pulse rounded bg-white/10" />
-          <div class="h-4 w-8/12 animate-pulse rounded bg-white/10" />
+      </div>
+      
+      <div v-else class="max-w-3xl mx-auto flex flex-col pt-8 space-y-8">
+        <ChatMessage 
+          v-for="msg in messages" 
+          :key="msg.id" 
+          :role="msg.role" 
+          :text="msg.text" 
+        />
+        
+        <div v-if="loading" class="flex gap-4 w-full max-w-[85%] text-[15px] leading-7 items-center">
+          <div class="mt-0.5 shrink-0 grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-black">
+            ✦
+          </div>
+          <div class="flex gap-1">
+            <span class="h-2 w-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0s;"></span>
+            <span class="h-2 w-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0.2s;"></span>
+            <span class="h-2 w-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0.4s;"></span>
+          </div>
         </div>
-
-        <div v-else-if="error" class="rounded-2xl border border-red-400/20 bg-red-400/5 p-4 text-sm leading-6 text-red-200">
+        
+        <div v-if="error" class="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm leading-6 text-red-200 mt-4">
           {{ error }}
         </div>
-
-        <article v-else class="prose prose-invert max-w-none whitespace-pre-wrap text-sm leading-7 text-zinc-300">
-          {{ response }}
-        </article>
       </div>
     </section>
 
-    <footer class="relative mx-auto flex max-w-7xl flex-col gap-2 border-t border-white/5 px-5 py-7 text-xs text-zinc-600 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-      <span>Built as a Full-Stack Vibe Coder submission.</span>
-      <span>Nuxt · Tailwind · Gemini</span>
-    </footer>
+    <!-- Input Area -->
+    <section class="relative z-20 shrink-0 px-4 pb-6 pt-2 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent">
+      <div class="mx-auto max-w-3xl">
+        <div class="relative flex flex-col w-full rounded-[26px] bg-[#2f2f2f] shadow-lg border border-zinc-700/50 overflow-hidden">
+          
+          <div class="flex items-center gap-2 overflow-x-auto px-4 pt-3 pb-1 no-scrollbar whitespace-nowrap">
+            <span class="text-[11px] font-medium text-zinc-500 uppercase tracking-widest shrink-0 mr-1">Context</span>
+            <button
+              v-for="integration in integrations"
+              :key="integration.id"
+              @click="toggleIntegration(integration.id)"
+              class="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors border"
+              :class="selected.includes(integration.id) ? 'bg-zinc-700 border-zinc-600 text-white' : 'bg-transparent border-zinc-700 text-zinc-400 hover:text-zinc-200'"
+            >
+              <span class="font-bold font-mono text-[10px]" :class="selected.includes(integration.id) ? 'text-white' : ''">
+                {{ integration.icon }}
+              </span>
+              {{ integration.name }}
+            </button>
+          </div>
+
+          <textarea
+            v-model="prompt"
+            rows="1"
+            maxlength="3000"
+            class="w-full resize-none bg-transparent pb-3.5 pt-2 pl-5 pr-14 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400 min-h-[44px] max-h-[200px]"
+            placeholder="Message ChatGPT..."
+            @keydown.enter.exact.prevent="send"
+          />
+
+          <!-- Send btn -->
+          <button
+            type="button"
+            :disabled="loading || !prompt.trim()"
+            class="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full transition-colors focus:outline-none"
+            :class="(loading || !prompt.trim()) ? 'bg-zinc-600 text-zinc-400 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'"
+            @click="send"
+          >
+            <span v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+            <svg v-else stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+          </button>
+        </div>
+        
+        <div class="mt-2 text-center text-xs text-zinc-400 px-4">
+          ChatGPT can make mistakes. Consider verifying important information.
+        </div>
+      </div>
+    </section>
   </main>
 </template>

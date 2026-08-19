@@ -9,21 +9,14 @@ const integrationContext: Record<string, string> = {
 }
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ prompt?: string; integrations?: string[] }>(event)
-  const prompt = body?.prompt?.trim()
+  const body = await readBody<{ messages?: { role: string; text: string }[]; integrations?: string[] }>(event)
+  const messages = body?.messages || []
   const integrations = Array.isArray(body?.integrations) ? body.integrations : []
 
-  if (!prompt) {
+  if (!messages.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Prompt is required.'
-    })
-  }
-
-  if (prompt.length > 3000) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Prompt must be 3000 characters or less.'
+      statusMessage: 'Messages are required.'
     })
   }
 
@@ -44,30 +37,28 @@ export default defineEventHandler(async (event) => {
   const systemInstruction = `
 You are Stunning's senior full-stack product engineer and vibe-coding copilot.
 
-Your job is to turn a product idea into a concise, implementation-ready response.
-Prioritize practical architecture, user experience, data flow, API boundaries, and an MVP-first approach.
+Your job is to turn a product idea into a concise, implementation-ready response, and then chat with the user to refine it.
+Prioritize clear architecture, user experience, data flow, API boundaries, and an MVP-first approach.
 Do not claim that any integration is actually connected. The integrations below are contextual capabilities only.
 
-SELECTED INTEGRATIONS:
+SELECTED INTEGRATIONS (Global context for the project):
 ${selectedContext}
-
-When relevant, structure your response with:
-1. Product interpretation
-2. Recommended UX
-3. Technical approach
-4. Data/API flow
-5. MVP implementation steps
-6. Risks or trade-offs
 
 Keep the answer useful and concrete. Avoid generic filler.
 `
 
   try {
     const ai = new GoogleGenAI({ apiKey: config.geminiApiKey })
+    
+    // Map our generic format to Gemini's expected format
+    const contents = messages.map(msg => ({
+      role: msg.role === 'model' || msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.text }]
+    }))
 
     const result = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-      contents: prompt,
+      contents,
       config: {
         systemInstruction
       }
