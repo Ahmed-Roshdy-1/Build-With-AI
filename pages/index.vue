@@ -6,13 +6,14 @@ const {
   prompt, messages, loading, error,
   selected, messageContainer, hasStarted,
   toggleIntegration, send, useExample,
+  newChat
 } = useChat()
 </script>
 
 <template>
   <main class="flex h-screen flex-col overflow-hidden bg-[#212121] text-zinc-100 font-sans">
 
-    <AppHeader />
+    <AppHeader :has-started="hasStarted" @new-chat="newChat" />
 
     <!-- ── Chat / Welcome area ──────────────────────────────────────────────── -->
     <section
@@ -34,10 +35,10 @@ const {
           :key="msg.id"
           :role="msg.role"
           :text="msg.text"
+          :loading="loading"
         />
 
         <TypingIndicator v-if="loading" />
-
         <div
           v-if="error"
           class="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm leading-6 text-red-200 mt-4"

@@ -5,6 +5,7 @@ import { md } from '~/utils/markdown'
 const props = defineProps<{
   role: 'user' | 'model'
   text: string
+  loading?: boolean
 }>()
 
 const renderedContent = computed(() => md.render(props.text))
@@ -20,9 +21,9 @@ const renderedContent = computed(() => md.render(props.text))
     >
       {{ text }}
     </div>
-
+    
     <!-- AI response with avatar -->
-    <div v-else class="flex gap-4 w-full text-[15px] leading-[1.6]">
+    <div v-else-if="!loading" class="flex gap-4 w-full text-[15px] leading-[1.6]">
       <div class="mt-0.5 shrink-0 grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-black shadow-sm">
         ✦
       </div>

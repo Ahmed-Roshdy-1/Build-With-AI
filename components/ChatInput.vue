@@ -4,6 +4,7 @@ import type { Integration } from '~/types/chat'
 defineProps<{
   modelValue: string
   loading: boolean
+  streaming: boolean
   integrations: Integration[]
   selected: string[]
 }>()
@@ -11,6 +12,7 @@ defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   send: []
+  stop: []
   toggleIntegration: [id: string]
 }>()
 </script>
@@ -51,14 +53,31 @@ const emit = defineEmits<{
           :value="modelValue"
           rows="1"
           maxlength="3000"
-          class="w-full resize-none bg-transparent pb-3.5 pt-2 pl-5 pr-14 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400 min-h-[44px] max-h-[200px]"
-          placeholder="Message ChatGPT..."
+          :disabled="loading"
+          class="w-full resize-none bg-transparent pb-3.5 pt-2 pl-5 pr-14 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400 min-h-[44px] max-h-[200px] disabled:opacity-60"
+          placeholder="Message Vibe Coder..."
           @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
-          @keydown.enter.exact.prevent="emit('send')"
+          @keydown.enter.exact.prevent="!loading && emit('send')"
         />
 
-        <!-- Send button -->
+        <!-- Stop button (while streaming) -->
         <button
+          v-if="streaming"
+          id="stop-button"
+          type="button"
+          title="Stop generating"
+          class="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:bg-zinc-200 transition-colors focus:outline-none"
+          @click="emit('stop')"
+        >
+          <!-- Stop square icon -->
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5" y="5" width="14" height="14" rx="2" />
+          </svg>
+        </button>
+
+        <!-- Send button (when not streaming) -->
+        <button
+          v-else
           id="send-button"
           type="button"
           :disabled="loading || !modelValue.trim()"
@@ -89,7 +108,7 @@ const emit = defineEmits<{
 
       <!-- Disclaimer -->
       <div class="mt-2 text-center text-xs text-zinc-400 px-4">
-        ChatGPT can make mistakes. Consider verifying important information.
+        Vibe Coder can make mistakes. Consider verifying important information.
       </div>
     </div>
   </section>
